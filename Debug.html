@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミニチュア世界領土変化ゲーム</title>
+    <style>
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #uploaded-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            display: none;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="file" id="image-upload" accept="image/*">
+        <button id="start-game">プレイ</button>
+        <input type="color" id="territory-color" value="#ff0000">
+        <input type="text" id="territory-name" placeholder="国名">
+        <button id="create-territory">領土作成</button>
+        <label>
+            <input type="checkbox" id="export-on-update"> 地図を更新するごとにエクスポート
+        </label>
+        <button id="save">保存</button>
+        <button id="load">読み込み</button>
+    </div>
+    <div id="canvas-container">
+        <img id="uploaded-image" />
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadedImage = document.getElementById('uploaded-image');
+        let territories = [];
+        let intervalId;
+
+        // 画像アップロードと表示
+        document.getElementById('image-upload').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                uploadedImage.src = e.target.result;
+                uploadedImage.onload = () => {
+                    canvas.width = uploadedImage.width;
+                    canvas.height = uploadedImage.height;
+                    ctx.drawImage(uploadedImage, 0, 0);
+                    uploadedImage.style.display = 'block';
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 多角形の描画
+        function drawPolygon(x, y, radius, sides, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            for (let i = 0; i < sides; i++) {
+                const angle = (i * 2 * Math.PI) / sides;
+                ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 星形の描画
+        function drawStar(x, y, radius, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const outerAngle = (i * 2 * Math.PI) / 5;
+                const innerAngle = ((i + 0.5) * 2 * Math.PI) / 5;
+                ctx.lineTo(x + radius * Math.cos(outerAngle), y + radius * Math.sin(outerAngle));
+                ctx.lineTo(x + radius * 0.5 * Math.cos(innerAngle), y + radius * 0.5 * Math.sin(innerAngle));
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 六角形の描画
+        function drawHexagon(x, y, radius, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (i * 2 * Math.PI) / 6;
+                ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // ゲームスタート
+        document.getElementById('start-game').addEventListener('click', () => {
+            if (intervalId) clearInterval(intervalId);
+
+            intervalId = setInterval(() => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(uploadedImage, 0, 0);
+
+                // ランダムに拡大する領土の数を決定
+                const numTerritoriesToExpand = Math.floor(Math.random() * 6) + 1;
+                const territoriesToExpand = [];
+                const shuffledTerritories = territories.slice().sort(() => 0.5 - Math.random());
+                for (let i = 0; i < Math.min(numTerritoriesToExpand, shuffledTerritories.length); i++) {
+                    territoriesToExpand.push(shuffledTerritories[i]);
+                }
+
+                territories.forEach((territory) => {
+                    ctx.save();
+                    ctx.fillStyle = territory.color;
+
+                    if (territoriesToExpand.includes(territory)) {
+                        // ランダムに角度を変化させながら拡大
+                        ctx.translate(territory.x, territory.y);
+                        ctx.rotate(territory.angle);
+                        ctx.translate(-territory.x, -territory.y);
+
+                        if (territory.shape === 'circle') {
+                            ctx.beginPath();
+                            ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                            ctx.fill();
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'rectangle') {
+                            ctx.fillRect(
+                                territory.x - territory.radius,
+                                territory.y - territory.radius,
+                                territory.radius * 2,
+                                territory.radius * 2
+                            );
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'triangle') {
+                            drawTriangle(territory.x, territory.y, territory.radius, territory.color);
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'polygon') {
+                            drawPolygon(territory.x, territory.y, territory.radius, 6, territory.color); // 例として6角形
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'star') {
+                            drawStar(territory.x, territory.y, territory.radius, territory.color);
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'hexagon') {
+                            drawHexagon(territory.x, territory.y, territory.radius, territory.color);
+                            territory.radius += Math.random() * 2 + 6;
+                        }
+
+                        // 更新する角度を変化
+                        territory.angle += (Math.random() - 0.5) * 0.1;
+                    } else {
+                        if (territory.shape === 'circle') {
+                            ctx.beginPath();
+                            ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else if (territory.shape === 'rectangle') {
+                            ctx.fillRect(
+                                territory.x - territory.radius,
+                                territory.y - territory.radius,
+                                territory.radius * 2,
+                                territory.radius * 2
+                            );
+                        } else if (territory.shape === 'triangle') {
+                            drawTriangle(territory.x, territory.y, territory.radius, territory.color);
+                        } else if (territory.shape === 'polygon') {
+                            drawPolygon(territory.x, territory.y, territory.radius, 6, territory.color);
+                        } else if (territory.shape === 'star') {
+                            drawStar(territory.x, territory.y, territory.radius, territory.color);
+                        } else if (territory.shape === 'hexagon') {
+                            drawHexagon(territory.x, territory.y, territory.radius, territory.color);
+                        }
+                    }
+                    ctx.restore();
+                });
+
+                if (document.getElementById('export-on-update').checked) {
+                    const dataURL = canvas.toDataURL();
+                    localStorage.setItem('savedMap', JSON.stringify({ image: uploadedImage.src, territories }));
+                }
+            }, Math.floor(Math.random() * 2000) + 1000); // 1〜3秒ごとに実行
+        });
+
+        // 領土作成
+        document.getElementById('create-territory').addEventListener('click', () => {
+            const color = document.getElementById('territory-color').value;
+            const name = document.getElementById('territory-name').value;
+            const shapes = ['circle', 'rectangle', 'triangle', 'polygon', 'star', 'hexagon'];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            territories.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: 10,
+                color: color,
+                name: name,
+                shape: shape,
+                angle: Math.random() * Math.PI * 2 // 初期角度
+            });
+        });
+
+        // 保存
+        document.getElementById('save').addEventListener('click', () => {
+            const dataURL = canvas.toDataURL();
+            localStorage.setItem('savedMap', JSON.stringify({ image: uploadedImage.src, territories }));
+        });
+
+        // 読み込み
+        document.getElementById('load').addEventListener('click', () => {
+            const savedData = JSON.parse(localStorage.getItem('savedMap'));
+            if (savedData) {
+                const img = new Image();
+                img.src = savedData.image;
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    territories = savedData.territories;
+
+                    // 読み込んだ地図に保存されていた領土を再描画
+                    territories.forEach((territory) => {
+                        ctx.save();
+                        ctx.fillStyle = territory.color;
+
+                        if (territory.shape === 'circle') {
+                            ctx.beginPath();
+                            ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else if (territory.shape === 'rectangle') {
+                            ctx.fillRect(
+                                territory.x - territory.radius,
+                                territory.y - territory.radius,
+                                territory.radius * 2,
+                                territory.radius * 2
+                            );
+                        } else if (territory.shape === 'triangle') {
+                            drawTriangle(territory.x, territory.y, territory.radius, territory.color);
+                        } else if (territory.shape === 'polygon') {
+                            drawPolygon(territory.x, territory.y, territory.radius, 6, territory.color);
+                        } else if (territory.shape === 'star') {
+                            drawStar(territory.x, territory.y, territory.radius, territory.color);
+                        } else if (territory.shape === 'hexagon') {
+                            drawHexagon(territory.x, territory.y, territory.radius, territory.color);
+                        }
+
+                        ctx.restore();
+                    });
+                };
+            }
+        });
+    </script>
+</body>
+</html>
