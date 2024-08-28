@@ -7,9 +7,21 @@
     <style>
         #canvas-container {
             position: relative;
+            width: 100%;
+            height: 100%;
         }
         #canvas {
-            border: 1px solid black;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #uploaded-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            display: none;
         }
         .controls {
             margin-bottom: 10px;
@@ -30,12 +42,14 @@
         <button id="load">読み込み</button>
     </div>
     <div id="canvas-container">
+        <img id="uploaded-image" />
         <canvas id="canvas"></canvas>
     </div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const uploadedImage = document.getElementById('uploaded-image');
         let image = new Image();
         let territories = [];
         let intervalId;
@@ -45,18 +59,11 @@
             const file = event.target.files[0];
             const reader = new FileReader();
             reader.onload = (e) => {
-                image.src = e.target.result;
-                image.onload = () => {
-                    canvas.width = image.width;
-                    canvas.height = image.height;
-                    ctx.drawImage(image, 0, 0);
-                    // 領土の再描画
-                    territories.forEach(territory => {
-                        ctx.beginPath();
-                        ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
-                        ctx.fillStyle = territory.color;
-                        ctx.fill();
-                    });
+                uploadedImage.src = e.target.result;
+                uploadedImage.onload = () => {
+                    canvas.width = uploadedImage.width;
+                    canvas.height = uploadedImage.height;
+                    uploadedImage.style.display = 'block';
                 };
             };
             reader.readAsDataURL(file);
@@ -66,15 +73,24 @@
         document.getElementById('start-game').addEventListener('click', () => {
             if (intervalId) clearInterval(intervalId);
             intervalId = setInterval(() => {
-                // 元の画像を再描画
-                ctx.drawImage(image, 0, 0);
-                // 領土の再描画
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(uploadedImage, 0, 0);
                 territories.forEach(territory => {
-                    ctx.beginPath();
-                    ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
                     ctx.fillStyle = territory.color;
-                    ctx.fill();
-                    territory.radius += Math.random() * 2 + 6;
+                    if (territory.shape === 'circle') {
+                        ctx.beginPath();
+                        ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        territory.radius += Math.random() * 2 + 6;
+                    } else if (territory.shape === 'rectangle') {
+                        ctx.fillRect(
+                            territory.x - territory.radius,
+                            territory.y - territory.radius,
+                            territory.radius * 2,
+                            territory.radius * 2
+                        );
+                        territory.radius += Math.random() * 2 + 6;
+                    }
                 });
                 if (document.getElementById('export-on-update').checked) {
                     const dataURL = canvas.toDataURL();
@@ -87,12 +103,15 @@
         document.getElementById('create-territory').addEventListener('click', () => {
             const color = document.getElementById('territory-color').value;
             const name = document.getElementById('territory-name').value;
+            const shapes = ['circle', 'rectangle'];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
             territories.push({
                 x: Math.random() * canvas.width,
                 y: Math.random() * canvas.height,
                 radius: 10,
                 color: color,
-                name: name
+                name: name,
+                shape: shape
             });
         });
 
