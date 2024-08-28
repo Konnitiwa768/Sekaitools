@@ -194,7 +194,11 @@
 
                 if (document.getElementById('export-on-update').checked) {
                     const dataURL = canvas.toDataURL();
-                    localStorage.setItem('savedMap', dataURL);
+                    const savedData = {
+                        image: dataURL,
+                        territories: territories
+                    };
+                    localStorage.setItem('savedMap', JSON.stringify(savedData));
                 }
             }, Math.floor(Math.random() * 2000) + 1000); // 1〜3秒ごとに実行
         });
@@ -219,20 +223,26 @@
         // 保存
         document.getElementById('save').addEventListener('click', () => {
             const dataURL = canvas.toDataURL();
-            localStorage.setItem('savedMap', dataURL);
+            const savedData = {
+                image: dataURL,
+                territories: territories
+            };
+            localStorage.setItem('savedMap', JSON.stringify(savedData));
         });
 
         // 読み込み
         document.getElementById('load').addEventListener('click', () => {
-            const dataURL = localStorage.getItem('savedMap');
-            if (dataURL) {
+            const savedData = JSON.parse(localStorage.getItem('savedMap'));
+            if (savedData) {
                 const img = new Image();
-                img.src = dataURL;
+                img.src = savedData.image;
                 img.onload = () => {
                     canvas.width = img.width;
                     canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
                     
+                    territories = savedData.territories;
+
                     // 読み込んだ地図に保存されていた領土を再描画
                     territories.forEach((territory) => {
                         ctx.save();
