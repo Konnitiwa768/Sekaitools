@@ -21,7 +21,7 @@
             top: 0;
             left: 0;
             z-index: 2;
-            display: none; /* 画像は最初は表示しない */
+            display: none;
         }
         .controls {
             margin-bottom: 10px;
@@ -42,8 +42,8 @@
         <button id="load">読み込み</button>
     </div>
     <div id="canvas-container">
-        <canvas id="canvas"></canvas>
         <img id="uploaded-image" />
+        <canvas id="canvas"></canvas>
     </div>
 
     <script>
@@ -51,7 +51,6 @@
         const ctx = canvas.getContext('2d');
         const uploadedImage = document.getElementById('uploaded-image');
         let territories = [];
-        let imageDataURL = null;
         let intervalId;
 
         // 画像アップロードと表示
@@ -63,10 +62,7 @@
                 uploadedImage.onload = () => {
                     canvas.width = uploadedImage.width;
                     canvas.height = uploadedImage.height;
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    uploadedImage.style.display = 'block'; // 画像を表示
-                    ctx.drawImage(uploadedImage, 0, 0);
-                    imageDataURL = canvas.toDataURL(); // 画像データを保存
+                    uploadedImage.style.display = 'block';
                 };
             };
             reader.readAsDataURL(file);
@@ -122,14 +118,7 @@
 
             intervalId = setInterval(() => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                if (imageDataURL) {
-                    const img = new Image();
-                    img.src = imageDataURL;
-                    img.onload = () => {
-                        ctx.drawImage(img, 0, 0);
-                    };
-                }
+                ctx.drawImage(uploadedImage, 0, 0);
 
                 // ランダムに拡大する領土の数を決定
                 const numTerritoriesToExpand = Math.floor(Math.random() * 6) + 1;
@@ -205,11 +194,7 @@
 
                 if (document.getElementById('export-on-update').checked) {
                     const dataURL = canvas.toDataURL();
-                    const savedData = {
-                        image: imageDataURL, // 元の画像データURLを使用
-                        territories: territories
-                    };
-                    localStorage.setItem('savedMap', JSON.stringify(savedData));
+                    localStorage.setItem('savedMap', dataURL);
                 }
             }, Math.floor(Math.random() * 2000) + 1000); // 1〜3秒ごとに実行
         });
@@ -234,27 +219,20 @@
         // 保存
         document.getElementById('save').addEventListener('click', () => {
             const dataURL = canvas.toDataURL();
-            const savedData = {
-                image: imageDataURL,
-                territories: territories
-            };
-            localStorage.setItem('savedMap', JSON.stringify(savedData));
+            localStorage.setItem('savedMap', dataURL);
         });
 
         // 読み込み
         document.getElementById('load').addEventListener('click', () => {
-            const savedData = JSON.parse(localStorage.getItem('savedMap'));
-            if (savedData) {
+            const dataURL = localStorage.getItem('savedMap');
+            if (dataURL) {
                 const img = new Image();
-                img.src = savedData.image;
+                img.src = dataURL;
                 img.onload = () => {
                     canvas.width = img.width;
                     canvas.height = img.height;
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
                     
-                    territories = savedData.territories;
-
                     // 読み込んだ地図に保存されていた領土を再描画
                     territories.forEach((territory) => {
                         ctx.save();
