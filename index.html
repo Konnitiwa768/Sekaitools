@@ -68,45 +68,14 @@
             reader.readAsDataURL(file);
         });
 
-        // 多角形の描画
-        function drawPolygon(x, y, radius, sides, color) {
+        // 領土の描画
+        function drawTriangle(x, y, radius, color) {
             ctx.save();
             ctx.fillStyle = color;
             ctx.beginPath();
-            for (let i = 0; i < sides; i++) {
-                const angle = (i * 2 * Math.PI) / sides;
-                ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        }
-
-        // 星形の描画
-        function drawStar(x, y, radius, color) {
-            ctx.save();
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            for (let i = 0; i < 5; i++) {
-                const outerAngle = (i * 2 * Math.PI) / 5;
-                const innerAngle = ((i + 0.5) * 2 * Math.PI) / 5;
-                ctx.lineTo(x + radius * Math.cos(outerAngle), y + radius * Math.sin(outerAngle));
-                ctx.lineTo(x + radius * 0.5 * Math.cos(innerAngle), y + radius * 0.5 * Math.sin(innerAngle));
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        }
-
-        // 六角形の描画
-        function drawHexagon(x, y, radius, color) {
-            ctx.save();
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const angle = (i * 2 * Math.PI) / 6;
-                ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-            }
+            ctx.moveTo(x, y - radius);
+            ctx.lineTo(x - radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+            ctx.lineTo(x + radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
             ctx.closePath();
             ctx.fill();
             ctx.restore();
@@ -154,15 +123,6 @@
                         } else if (territory.shape === 'triangle') {
                             drawTriangle(territory.x, territory.y, territory.radius, territory.color);
                             territory.radius += Math.random() * 2 + 6;
-                        } else if (territory.shape === 'polygon') {
-                            drawPolygon(territory.x, territory.y, territory.radius, 6, territory.color); // 例として6角形
-                            territory.radius += Math.random() * 2 + 6;
-                        } else if (territory.shape === 'star') {
-                            drawStar(territory.x, territory.y, territory.radius, territory.color);
-                            territory.radius += Math.random() * 2 + 6;
-                        } else if (territory.shape === 'hexagon') {
-                            drawHexagon(territory.x, territory.y, territory.radius, territory.color);
-                            territory.radius += Math.random() * 2 + 6;
                         }
 
                         // 更新する角度を変化
@@ -181,12 +141,6 @@
                             );
                         } else if (territory.shape === 'triangle') {
                             drawTriangle(territory.x, territory.y, territory.radius, territory.color);
-                        } else if (territory.shape === 'polygon') {
-                            drawPolygon(territory.x, territory.y, territory.radius, 6, territory.color);
-                        } else if (territory.shape === 'star') {
-                            drawStar(territory.x, territory.y, territory.radius, territory.color);
-                        } else if (territory.shape === 'hexagon') {
-                            drawHexagon(territory.x, territory.y, territory.radius, territory.color);
                         }
                     }
                     ctx.restore();
@@ -203,7 +157,7 @@
         document.getElementById('create-territory').addEventListener('click', () => {
             const color = document.getElementById('territory-color').value;
             const name = document.getElementById('territory-name').value;
-            const shapes = ['circle', 'rectangle', 'triangle', 'polygon', 'star', 'hexagon'];
+            const shapes = ['circle', 'rectangle', 'triangle'];
             const shape = shapes[Math.floor(Math.random() * shapes.length)];
             territories.push({
                 x: Math.random() * canvas.width,
@@ -232,35 +186,6 @@
                     canvas.width = img.width;
                     canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
-                    
-                    // 読み込んだ地図に保存されていた領土を再描画
-                    territories.forEach((territory) => {
-                        ctx.save();
-                        ctx.fillStyle = territory.color;
-
-                        if (territory.shape === 'circle') {
-                            ctx.beginPath();
-                            ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
-                            ctx.fill();
-                        } else if (territory.shape === 'rectangle') {
-                            ctx.fillRect(
-                                territory.x - territory.radius,
-                                territory.y - territory.radius,
-                                territory.radius * 2,
-                                territory.radius * 2
-                            );
-                        } else if (territory.shape === 'triangle') {
-                            drawTriangle(territory.x, territory.y, territory.radius, territory.color);
-                        } else if (territory.shape === 'polygon') {
-                            drawPolygon(territory.x, territory.y, territory.radius, 6, territory.color);
-                        } else if (territory.shape === 'star') {
-                            drawStar(territory.x, territory.y, territory.radius, territory.color);
-                        } else if (territory.shape === 'hexagon') {
-                            drawHexagon(territory.x, territory.y, territory.radius, territory.color);
-                        }
-
-                        ctx.restore();
-                    });
                 };
             }
         });
