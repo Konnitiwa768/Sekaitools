@@ -50,7 +50,6 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const uploadedImage = document.getElementById('uploaded-image');
-        let image = new Image();
         let territories = [];
         let intervalId;
 
@@ -69,41 +68,96 @@
             reader.readAsDataURL(file);
         });
 
+        // 領土の描画
+        function drawTriangle(x, y, radius, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, y - radius);
+            ctx.lineTo(x - radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+            ctx.lineTo(x + radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
         // ゲームスタート
         document.getElementById('start-game').addEventListener('click', () => {
             if (intervalId) clearInterval(intervalId);
+
             intervalId = setInterval(() => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(uploadedImage, 0, 0);
-                territories.forEach(territory => {
+
+                // ランダムに拡大する領土の数を決定
+                const numTerritoriesToExpand = Math.floor(Math.random() * 6) + 1;
+                const territoriesToExpand = [];
+                const shuffledTerritories = territories.slice().sort(() => 0.5 - Math.random());
+                for (let i = 0; i < Math.min(numTerritoriesToExpand, shuffledTerritories.length); i++) {
+                    territoriesToExpand.push(shuffledTerritories[i]);
+                }
+
+                territories.forEach((territory) => {
+                    ctx.save();
                     ctx.fillStyle = territory.color;
-                    if (territory.shape === 'circle') {
-                        ctx.beginPath();
-                        ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
-                        ctx.fill();
-                        territory.radius += Math.random() * 2 + 6;
-                    } else if (territory.shape === 'rectangle') {
-                        ctx.fillRect(
-                            territory.x - territory.radius,
-                            territory.y - territory.radius,
-                            territory.radius * 2,
-                            territory.radius * 2
-                        );
-                        territory.radius += Math.random() * 2 + 6;
+
+                    if (territoriesToExpand.includes(territory)) {
+                        // ランダムに角度を変化させながら拡大
+                        ctx.translate(territory.x, territory.y);
+                        ctx.rotate(territory.angle);
+                        ctx.translate(-territory.x, -territory.y);
+
+                        if (territory.shape === 'circle') {
+                            ctx.beginPath();
+                            ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                            ctx.fill();
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'rectangle') {
+                            ctx.fillRect(
+                                territory.x - territory.radius,
+                                territory.y - territory.radius,
+                                territory.radius * 2,
+                                territory.radius * 2
+                            );
+                            territory.radius += Math.random() * 2 + 6;
+                        } else if (territory.shape === 'triangle') {
+                            drawTriangle(territory.x, territory.y, territory.radius, territory.color);
+                            territory.radius += Math.random() * 2 + 6;
+                        }
+
+                        // 更新する角度を変化
+                        territory.angle += (Math.random() - 0.5) * 0.1;
+                    } else {
+                        if (territory.shape === 'circle') {
+                            ctx.beginPath();
+                            ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else if (territory.shape === 'rectangle') {
+                            ctx.fillRect(
+                                territory.x - territory.radius,
+                                territory.y - territory.radius,
+                                territory.radius * 2,
+                                territory.radius * 2
+                            );
+                        } else if (territory.shape === 'triangle') {
+                            drawTriangle(territory.x, territory.y, territory.radius, territory.color);
+                        }
                     }
+                    ctx.restore();
                 });
+
                 if (document.getElementById('export-on-update').checked) {
                     const dataURL = canvas.toDataURL();
                     localStorage.setItem('savedMap', dataURL);
                 }
-            }, 3000);
+            }, Math.floor(Math.random() * 2000) + 1000); // 1〜3秒ごとに実行
         });
 
         // 領土作成
         document.getElementById('create-territory').addEventListener('click', () => {
             const color = document.getElementById('territory-color').value;
             const name = document.getElementById('territory-name').value;
-            const shapes = ['circle', 'rectangle'];
+            const shapes = ['circle', 'rectangle', 'triangle'];
             const shape = shapes[Math.floor(Math.random() * shapes.length)];
             territories.push({
                 x: Math.random() * canvas.width,
@@ -111,7 +165,8 @@
                 radius: 10,
                 color: color,
                 name: name,
-                shape: shape
+                shape: shape,
+                angle: Math.random() * Math.PI * 2 // 初期角度
             });
         });
 
