@@ -21,7 +21,7 @@
             top: 0;
             left: 0;
             z-index: 2;
-            display: none;
+            display: none; /* 画像は最初は表示しない */
         }
         .controls {
             margin-bottom: 10px;
@@ -42,8 +42,8 @@
         <button id="load">読み込み</button>
     </div>
     <div id="canvas-container">
-        <img id="uploaded-image" />
         <canvas id="canvas"></canvas>
+        <img id="uploaded-image" />
     </div>
 
     <script>
@@ -51,6 +51,7 @@
         const ctx = canvas.getContext('2d');
         const uploadedImage = document.getElementById('uploaded-image');
         let territories = [];
+        let imageDataURL = null;
         let intervalId;
 
         // 画像アップロードと表示
@@ -62,7 +63,10 @@
                 uploadedImage.onload = () => {
                     canvas.width = uploadedImage.width;
                     canvas.height = uploadedImage.height;
-                    uploadedImage.style.display = 'block';
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    uploadedImage.style.display = 'block'; // 画像を表示
+                    ctx.drawImage(uploadedImage, 0, 0);
+                    imageDataURL = canvas.toDataURL(); // 画像データを保存
                 };
             };
             reader.readAsDataURL(file);
@@ -118,7 +122,14 @@
 
             intervalId = setInterval(() => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(uploadedImage, 0, 0);
+
+                if (imageDataURL) {
+                    const img = new Image();
+                    img.src = imageDataURL;
+                    img.onload = () => {
+                        ctx.drawImage(img, 0, 0);
+                    };
+                }
 
                 // ランダムに拡大する領土の数を決定
                 const numTerritoriesToExpand = Math.floor(Math.random() * 6) + 1;
@@ -195,7 +206,7 @@
                 if (document.getElementById('export-on-update').checked) {
                     const dataURL = canvas.toDataURL();
                     const savedData = {
-                        image: dataURL,
+                        image: imageDataURL, // 元の画像データURLを使用
                         territories: territories
                     };
                     localStorage.setItem('savedMap', JSON.stringify(savedData));
@@ -224,7 +235,7 @@
         document.getElementById('save').addEventListener('click', () => {
             const dataURL = canvas.toDataURL();
             const savedData = {
-                image: dataURL,
+                image: imageDataURL,
                 territories: territories
             };
             localStorage.setItem('savedMap', JSON.stringify(savedData));
@@ -239,6 +250,7 @@
                 img.onload = () => {
                     canvas.width = img.width;
                     canvas.height = img.height;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
                     
                     territories = savedData.territories;
