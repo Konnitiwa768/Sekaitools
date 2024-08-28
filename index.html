@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミニチュア世界領土変化ゲーム</title>
+    <style>
+        #canvas-container {
+            position: relative;
+        }
+        #canvas {
+            border: 1px solid black;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="file" id="image-upload" accept="image/*">
+        <button id="start-game">プレイ</button>
+        <input type="color" id="territory-color" value="#ff0000">
+        <input type="text" id="territory-name" placeholder="国名">
+        <button id="create-territory">領土作成</button>
+        <label>
+            <input type="checkbox" id="export-on-update"> 地図を更新するごとにエクスポート
+        </label>
+        <button id="save">保存</button>
+        <button id="load">読み込み</button>
+    </div>
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let image = new Image();
+        let territories = [];
+        let intervalId;
+
+        // 画像アップロードと表示
+        document.getElementById('image-upload').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                image.src = e.target.result;
+                image.onload = () => {
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    ctx.drawImage(image, 0, 0);
+                    // 領土の再描画
+                    territories.forEach(territory => {
+                        ctx.beginPath();
+                        ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = territory.color;
+                        ctx.fill();
+                    });
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // ゲームスタート
+        document.getElementById('start-game').addEventListener('click', () => {
+            if (intervalId) clearInterval(intervalId);
+            intervalId = setInterval(() => {
+                // 元の画像を再描画
+                ctx.drawImage(image, 0, 0);
+                // 領土の再描画
+                territories.forEach(territory => {
+                    ctx.beginPath();
+                    ctx.arc(territory.x, territory.y, territory.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = territory.color;
+                    ctx.fill();
+                    territory.radius += Math.random() * 2 + 6;
+                });
+                if (document.getElementById('export-on-update').checked) {
+                    const dataURL = canvas.toDataURL();
+                    localStorage.setItem('savedMap', dataURL);
+                }
+            }, 3000);
+        });
+
+        // 領土作成
+        document.getElementById('create-territory').addEventListener('click', () => {
+            const color = document.getElementById('territory-color').value;
+            const name = document.getElementById('territory-name').value;
+            territories.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                radius: 10,
+                color: color,
+                name: name
+            });
+        });
+
+        // 保存
+        document.getElementById('save').addEventListener('click', () => {
+            const dataURL = canvas.toDataURL();
+            localStorage.setItem('savedMap', dataURL);
+        });
+
+        // 読み込み
+        document.getElementById('load').addEventListener('click', () => {
+            const dataURL = localStorage.getItem('savedMap');
+            if (dataURL) {
+                const img = new Image();
+                img.src = dataURL;
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                };
+            }
+        });
+    </script>
+</body>
+</html>
