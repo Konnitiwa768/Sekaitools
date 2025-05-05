@@ -195,7 +195,7 @@
       const nameMap = {};
       territories.forEach(t => nameMap[t.color.toLowerCase()] = t.name || t.color);
 
-      const sorted = Object.entries(areaMap).sort((a, b) => b[1] - a[1]);
+      const sorted = Object.entries(areaMap).sort((a, b) => b[1] - a[1]).slice(0, 100);
       const rankText = sorted.map(([hex, val], i) =>
         `${i + 1}. ${nameMap[hex] || hex}: ${val}pw`).join('\n');
       document.getElementById('ranking').textContent = rankText;
