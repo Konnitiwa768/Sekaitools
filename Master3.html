@@ -36,6 +36,10 @@
   </style>
 </head>
 <body>
+  <div id="canvas-container">
+    <img id="uploaded-image" />
+    <canvas id="canvas"></canvas>
+  </div>
   <div class="controls">
     <div id="ranking"></div>
     <input type="file" id="image-upload" accept="image/*" />
@@ -49,11 +53,6 @@
     <button id="save">保存</button>
     <button id="load">読み込み</button>
   </div>
-  <div id="canvas-container">
-    <img id="uploaded-image" />
-    <canvas id="canvas"></canvas>
-  </div>
-
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
