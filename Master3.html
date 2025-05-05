@@ -37,6 +37,7 @@
 </head>
 <body>
   <div class="controls">
+    <div id="ranking"></div>
     <input type="file" id="image-upload" accept="image/*" />
     <button id="start-game">プレイ</button>
     <input type="color" id="territory-color" value="#ff0000" />
@@ -52,7 +53,6 @@
     <img id="uploaded-image" />
     <canvas id="canvas"></canvas>
   </div>
-  <div id="ranking"></div>
 
   <script>
     const canvas = document.getElementById('canvas');
