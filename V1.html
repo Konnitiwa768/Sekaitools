@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ミニチュア世界領土変化ゲーム</title>
+  <style>
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+    #uploaded-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+      display: none;
+    }
+    .controls {
+      margin-bottom: 10px;
+    }
+    #ranking {
+      margin-top: 10px;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <input type="file" id="image-upload" accept="image/*" />
+    <button id="start-game">プレイ</button>
+    <input type="color" id="territory-color" value="#ff0000" />
+    <input type="text" id="territory-name" placeholder="国名" />
+    <button id="create-territory">領土作成</button>
+    <label>
+      <input type="checkbox" id="export-on-update" /> 地図を更新するごとにエクスポート
+    </label>
+    <button id="save">保存</button>
+    <button id="load">読み込み</button>
+  </div>
+  <div id="canvas-container">
+    <img id="uploaded-image" />
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="ranking"></div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const uploadedImage = document.getElementById('uploaded-image');
+    let territories = [];
+    let imageLoaded = false;
+    let intervalId;
+
+    document.getElementById('image-upload').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        uploadedImage.src = e.target.result;
+        uploadedImage.onload = () => {
+          canvas.width = uploadedImage.width;
+          canvas.height = uploadedImage.height;
+          uploadedImage.style.display = 'block';
+          imageLoaded = true;
+          loadTerritories();
+        };
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function drawTriangle(x, y, radius, color) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, y - radius);
+      ctx.lineTo(x - radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+      ctx.lineTo(x + radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawDiamond(x, y, radius, color) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, y - radius);
+      ctx.lineTo(x - radius, y);
+      ctx.lineTo(x, y + radius);
+      ctx.lineTo(x + radius, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawParallelogram(x, y, width, height, color) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x - width / 2, y - height / 2);
+      ctx.lineTo(x + width / 2, y - height / 2);
+      ctx.lineTo(x + width / 2, y + height / 2);
+      ctx.lineTo(x - width / 2, y + height / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawStar(x, y, radius, color) {
+      const spikeCount = 6;
+      const spikeLength = radius * 1.5;
+      const angleStep = Math.PI / spikeCount;
+
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (let i = 0; i < spikeCount * 2; i++) {
+        const angle = i * angleStep;
+        const r = i % 2 === 0 ? radius : spikeLength;
+        const xPos = x + r * Math.cos(angle);
+        const yPos = y - r * Math.sin(angle);
+        if (i === 0) {
+          ctx.moveTo(xPos, yPos);
+        } else {
+          ctx.lineTo(xPos, yPos);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawTerritory(t, expand) {
+      ctx.save();
+      ctx.fillStyle = t.color;
+      if (expand) {
+        ctx.translate(t.x, t.y);
+        ctx.rotate(t.angle);
+        ctx.translate(-t.x, -t.y);
+      }
+      switch (t.shape) {
+        case 'circle':
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case 'rectangle':
+          ctx.fillRect(t.x - t.radius, t.y - t.radius, t.radius * 2, t.radius * 2);
+          break;
+        case 'triangle':
+          drawTriangle(t.x, t.y, t.radius, t.color);
+          break;
+        case 'diamond':
+          drawDiamond(t.x, t.y, t.radius, t.color);
+          break;
+        case 'parallelogram':
+          drawParallelogram(t.x, t.y, t.radius, t.radius, t.color);
+          break;
+        case 'star':
+          drawStar(t.x, t.y, t.radius, t.color);
+          break;
+      }
+      ctx.restore();
+      if (expand) {
+        t.radius += Math.random() * 2 + 6;
+        t.angle += (Math.random() - 0.5) * 0.1;
+      }
+    }
+
+    function updateRanking() {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const areaMap = {};
+      const bgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+      for (let i = 0; i < imgData.length; i += 4) {
+        const alpha = bgData[i + 3];
+        if (alpha === 0) continue;
+        const r = imgData[i];
+        const g = imgData[i + 1];
+        const b = imgData[i + 2];
+        const hex = rgbToHex(r, g, b);
+        areaMap[hex] = (areaMap[hex] || 0) + 2; // 2pw
+      }
+
+      const nameMap = {};
+      territories.forEach(t => nameMap[t.color.toLowerCase()] = t.name || t.color);
+
+      const sorted = Object.entries(areaMap).sort((a, b) => b[1] - a[1]);
+      const rankText = sorted.map(([hex, val], i) =>
+        `${i + 1}. ${nameMap[hex] || hex}: ${val}pw`).join('\n');
+      document.getElementById('ranking').textContent = rankText;
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    document.getElementById('start-game').addEventListener('click', () => {
+      if (!imageLoaded) return alert('画像がアップロードされていません。');
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(() => {
+        ctx.drawImage(uploadedImage, 0, 0);
+        const count = Math.floor(Math.random() * 6) + 1;
+        const expandTargets = territories.slice().sort(() => 0.5 - Math.random()).slice(0, count);
+        territories.forEach(t => drawTerritory(t, expandTargets.includes(t)));
+        if (document.getElementById('export-on-update').checked) {
+          localStorage.setItem('savedMap', canvas.toDataURL());
+        }
+        updateRanking();
+      }, Math.floor(Math.random() * 2000) + 1000);
+    });
+
+    document.getElementById('create-territory').addEventListener('click', () => {
+      if (!imageLoaded) return alert('画像がアップロードされていません。');
+      const color = document.getElementById('territory-color').value;
+      const name = document.getElementById('territory-name').value;
+      const shapes = ['circle', 'rectangle', 'triangle', 'diamond', 'parallelogram', 'star'];
+      const shape = shapes[Math.floor(Math.random() * shapes.length)];
+      territories.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: 10,
+        color,
+        name,
+        shape,
+        angle: Math.random() * Math.PI * 2
+      });
+      saveToLocalStorage();
+    });
+
+    document.getElementById('save').addEventListener('click', () => {
+      if (!imageLoaded) return alert('画像がアップロードされていません。');
+      saveToLocalStorage();
+    });
+
+    document.getElementById('load').addEventListener('click', () => {
+      const dataURL = localStorage.getItem('savedMap');
+      if (dataURL) {
+        const img = new Image();
+        img.src = dataURL;
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+        };
+      }
+      loadTerritories();
+    });
+
+    function saveToLocalStorage() {
+      localStorage.setItem('territories', JSON.stringify(territories));
+    }
+
+    function loadTerritories() {
+      const data = localStorage.getItem('territories');
+      if (data) territories = JSON.parse(data);
+    }
+  </script>
+</body>
+</html>
