@@ -1,4 +1,4 @@
-Your site is live at https://konnitiwa768.github.io/Sekaitools/E.html
+Your site is live at https://konnitiwa768.github.io/Sekaitools/F.html
 Last deployed by @Sakalt Sakalt 4 minutes ago
 https://chatgpt.com
 Your site is live at https://konnitiwa768.github.io/Sekaitools/Debug2.html
