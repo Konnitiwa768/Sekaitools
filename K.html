@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ミニチュア世界領土変化ゲーム</title>
+<style>
+body { margin: 0; font-family: sans-serif; overflow-y: scroll; }
+#controls { width: 250px; padding: 10px; background: #f0f0f0; box-sizing: border-box; float: left; height: 100vh; overflow-y: auto; }
+#canvas-container { margin-left: 250px; position: relative; background: #ccc; width: calc(100% - 250px); min-height: 100vh; }
+#canvas { position: absolute; top: 0; left: 0; z-index: 0; image-rendering: pixelated; }
+#uploaded-image { position: absolute; top: 0; left: 0; z-index: 1; display: none; }
+#ranking { margin-top: 10px; background: #fff; padding: 10px; max-height: 400px; overflow-y: auto; border: 1px solid #aaa; }
+.controls input, .controls button, .controls label { display: block; margin: 5px 0; width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+
+<div id="controls" class="controls">
+    <input type="file" id="image-upload" accept="image/*">
+    <button id="start-game">プレイ</button>
+    <input type="color" id="territory-color" value="#ff0000">
+    <input type="text" id="territory-name" placeholder="国名">
+    <button id="create-territory">ランダム領土作成</button>
+    <label><input type="checkbox" id="export-on-update"> 地図更新ごとに保存</label>
+    <label><input type="checkbox" id="free-mode"> 自由国家設置モード</label>
+    <label><input type="checkbox" id="coordinate-mode"> 座標指定モード</label>
+    <input type="number" id="coord-x" placeholder="X座標">
+    <input type="number" id="coord-y" placeholder="Y座標">
+    <button id="place-coordinate">座標から領土作成</button>
+    <button id="save">保存</button>
+    <button id="load">読み込み</button>
+    <button id="reset">リセット</button>
+    <div id="ranking"><b>ランキング</b></div>
+</div>
+
+<div id="canvas-container">
+    <img id="uploaded-image">
+    <canvas id="canvas"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const uploadedImage = document.getElementById('uploaded-image');
+const rankingDiv = document.getElementById('ranking');
+
+let territories = [];
+let imageLoaded = false;
+let intervalId = null;
+let freeMode = false;
+let coordinateMode = false;
+
+document.getElementById('free-mode').addEventListener('change', e => freeMode = e.target.checked);
+document.getElementById('coordinate-mode').addEventListener('change', e => coordinateMode = e.target.checked);
+
+// 画像アップロード
+document.getElementById('image-upload').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        uploadedImage.src = ev.target.result;
+        uploadedImage.onload = () => {
+            canvas.width = uploadedImage.width;
+            canvas.height = uploadedImage.height;
+            uploadedImage.style.display = 'block';
+            imageLoaded = true;
+            loadTerritories();
+            drawAll();
+        };
+    };
+    reader.readAsDataURL(file);
+});
+
+// 描画関数（回転・揺れ・パルス対応）
+function drawTriangle(x,y,r,color,angle=0){ 
+    ctx.save(); ctx.translate(x,y); ctx.rotate(angle); ctx.fillStyle=color; ctx.beginPath();
+    ctx.moveTo(0,-r); ctx.lineTo(-r*Math.sin(Math.PI/6),r*Math.cos(Math.PI/6)); ctx.lineTo(r*Math.sin(Math.PI/6),r*Math.cos(Math.PI/6));
+    ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function drawDiamond(x,y,r,color,angle=0){ 
+    ctx.save(); ctx.translate(x,y); ctx.rotate(angle); ctx.fillStyle=color; ctx.beginPath();
+    ctx.moveTo(0,-r); ctx.lineTo(-r,0); ctx.lineTo(0,r); ctx.lineTo(r,0); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function drawParallelogram(x,y,w,h,color,angle=0){ 
+    ctx.save(); ctx.translate(x,y); ctx.rotate(angle); ctx.fillStyle=color; ctx.beginPath();
+    ctx.moveTo(-w/2,-h/2); ctx.lineTo(w/2,-h/2); ctx.lineTo(w/2,h/2); ctx.lineTo(-w/2,h/2); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function drawStar(x,y,r,color,angle=0){ 
+    ctx.save(); ctx.translate(x,y); ctx.rotate(angle); ctx.fillStyle=color; ctx.beginPath();
+    const spikes=6,len=r*1.5,step=Math.PI/spikes; 
+    for(let i=0;i<spikes*2;i++){
+        const a=i*step,rad=i%2===0?r:len;
+        const xp=rad*Math.cos(a), yp=-rad*Math.sin(a);
+        if(i===0) ctx.moveTo(xp,yp); else ctx.lineTo(xp,yp);
+    } 
+    ctx.closePath(); ctx.fill(); ctx.restore();
+}
+
+function drawTerritory(t){
+    const time = Date.now()/500;
+    let radius = t.radius;
+    let angle = 0;
+    let offsetX=0, offsetY=0;
+
+    // ギミック適用
+    if(t.gimmick==='rotate') angle = time;
+    if(t.gimmick==='pulse') radius = t.radius*(1+0.3*Math.sin(time));
+    if(t.gimmick==='shake') { offsetX = Math.sin(time*5)*3; offsetY = Math.cos(time*3)*3; }
+
+    const x = t.x + offsetX, y = t.y + offsetY;
+
+    switch(t.shape){
+        case 'circle': ctx.fillStyle=t.color; ctx.beginPath(); ctx.arc(x,y,radius,0,2*Math.PI); ctx.fill(); break;
+        case 'rectangle': ctx.fillStyle=t.color; ctx.fillRect(x-radius,y-radius,radius*2,radius*2); break;
+        case 'triangle': drawTriangle(x,y,radius,t.color,angle); break;
+        case 'diamond': drawDiamond(x,y,radius,t.color,angle); break;
+        case 'parallelogram': drawParallelogram(x,y,radius,radius,t.color,angle); break;
+        case 'star': drawStar(x,y,radius,t.color,angle); break;
+    }
+}
+
+function drawAll(){
+    if(!imageLoaded) return;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(uploadedImage,0,0);
+    territories.forEach(drawTerritory);
+}
+
+// ランダム領土作成
+document.getElementById('create-territory').addEventListener('click', ()=>{
+    if(!imageLoaded) return;
+    const color = document.getElementById('territory-color').value;
+    const name = document.getElementById('territory-name').value || '無名';
+    const shapes = ['circle','rectangle','triangle','diamond','parallelogram','star'];
+    const shape = shapes[Math.floor(Math.random()*shapes.length)];
+    const gimmicks = [null,'rotate','pulse','shake'];
+    const gimmick = gimmicks[Math.floor(Math.random()*gimmicks.length)];
+    territories.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,radius:10,color,name,shape,gimmick});
+    saveToLocalStorage();
+    drawAll();
+    updateRanking();
+});
+
+// 自由国家設置・座標指定モード
+function placeTerritory(x,y){
+    if(!imageLoaded) return;
+    const color = document.getElementById('territory-color').value;
+    const name = document.getElementById('territory-name').value || '無名';
+    const shapes = ['circle','rectangle','triangle','diamond','parallelogram','star'];
+    const shape = shapes[Math.floor(Math.random()*shapes.length)];
+    const gimmicks = [null,'rotate','pulse','shake'];
+    const gimmick = gimmicks[Math.floor(Math.random()*gimmicks.length)];
+    territories.push({x,y,radius:10,color,name,shape,gimmick});
+    saveToLocalStorage();
+    drawAll();
+    updateRanking();
+}
+
+// 座標クリック
+function handleClickCoordinate(clientX, clientY){
+    if(!imageLoaded) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.round((clientX - rect.left)*(canvas.width/rect.width));
+    const y = Math.round((clientY - rect.top)*(canvas.height/rect.height));
+    if(confirm(`座標取得: X=${x}, Y=${y}\nOKで入力欄にセット`)){
+        document.getElementById('coord-x').value = x;
+        document.getElementById('coord-y').value = y;
+    }
+}
+
+// Canvasイベント
+canvas.addEventListener('click', e=>{
+    if(coordinateMode) handleClickCoordinate(e.clientX,e.clientY);
+    else if(freeMode) placeTerritory(
+        Math.round((e.clientX-canvas.getBoundingClientRect().left)*(canvas.width/canvas.getBoundingClientRect().width)),
+        Math.round((e.clientY-canvas.getBoundingClientRect().top)*(canvas.height/canvas.getBoundingClientRect().height))
+    );
+});
+canvas.addEventListener('touchend', e=>{
+    for(let t of e.changedTouches){
+        if(coordinateMode) handleClickCoordinate(t.clientX,t.clientY);
+        else if(freeMode) placeTerritory(
+            Math.round((t.clientX-canvas.getBoundingClientRect().left)*(canvas.width/canvas.getBoundingClientRect().width)),
+            Math.round((t.clientY-canvas.getBoundingClientRect().top)*(canvas.height/canvas.getBoundingClientRect().height))
+        );
+    }
+}, {passive:true});
+
+// 座標入力から配置
+document.getElementById('place-coordinate').addEventListener('click', ()=>{
+    const x = parseInt(document.getElementById('coord-x').value);
+    const y = parseInt(document.getElementById('coord-y').value);
+    if(isNaN(x) || isNaN(y)) { alert('座標を入力してください'); return; }
+    placeTerritory(x,y);
+});
+
+// ゲームスタート
+document.getElementById('start-game').addEventListener('click', ()=>{
+    if(!imageLoaded){ alert('画像をアップロードしてください'); return; }
+    if(intervalId) clearInterval(intervalId);
+    intervalId = setInterval(drawAll, 33); // 約30FPSで更新
+});
+
+// 保存・読み込み・リセット
+document.getElementById('save').addEventListener('click', ()=>saveToLocalStorage());
+document.getElementById('load').addEventListener('click', ()=>loadTerritories());
+document.getElementById('reset').addEventListener('click', ()=>{
+    if(confirm('本当にリセットしますか？')){ territories=[]; saveToLocalStorage(); drawAll(); updateRanking(); }
+});
+
+// LocalStorage
+function saveToLocalStorage(){
+    localStorage.setItem('territories', JSON.stringify(territories));
+    if(imageLoaded) localStorage.setItem('savedMap', canvas.toDataURL());
+}
+function loadTerritories(){
+    const data = localStorage.getItem('territories');
+    if(data) territories = JSON.parse(data);
+    drawAll();
+    updateRanking();
+}
+
+// ランキング更新
+function updateRanking(){
+    if(!imageLoaded) return;
+    const counts = {};
+    territories.forEach(t=>counts[t.name]=0);
+    const imgData = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    for(let y=0;y<canvas.height;y++){
+        for(let x=0;x<canvas.width;x++){
+            const i=(y*canvas.width+x)*4;
+            if(imgData[i+3]===0) continue;
+            territories.forEach(t=>{
+                const dx=x-t.x, dy=y-t.y, r=t.radius;
+                let inside=false;
+                switch(t.shape){
+                    case 'circle': inside=dx*dx+dy*dy<=r*r; break;
+                    case 'rectangle': inside=Math.abs(dx)<=r&&Math.abs(dy)<=r; break;
+                    case 'triangle': inside=dy<=r&&dy>=-r*Math.sqrt(3)/2&&Math.abs(dx)<=r; break;
+                    case 'diamond': inside=Math.abs(dx)+Math.abs(dy)<=r; break;
+                    case 'parallelogram': inside=Math.abs(dx)<=r&&Math.abs(dy)<=r; break;
+                    case 'star': inside=dx*dx+dy*dy<=r*r*2; break;
+                }
+                if(inside) counts[t.name]++;
+            });
+        }
+    }
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    rankingDiv.innerHTML = "<b>ランキング</b><br>";
+    sorted.forEach(([name,count],idx)=>{ if(name) rankingDiv.innerHTML += `${idx+1}. ${name}: ${count}px<br>`; });
+}
+</script>
+</body>
+</html>
