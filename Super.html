@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミニチュア世界領土変化ゲーム</title>
+    <style>
+        body {
+            font-family: "Segoe UI", "Hiragino Sans", sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 10px;
+            background-color: #222;
+            color: #fff;
+            gap: 5px;
+        }
+        .controls input, .controls button, .controls label {
+            margin: 2px;
+            padding: 5px;
+        }
+        #canvas-container {
+            position: relative;
+            flex: 1;
+            background-color: #ddd;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+        #uploaded-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            display: none;
+        }
+        #territory-list {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            right: 5px;
+            max-height: 120px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #ccc;
+            padding: 5px;
+            z-index: 10;
+            border-radius: 5px;
+        }
+        #territory-list div {
+            cursor: pointer;
+            padding: 3px;
+            border-bottom: 1px solid #eee;
+            border-radius: 3px;
+        }
+        #territory-list div:last-child {
+            border-bottom: none;
+        }
+        #territory-list div:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <input type="file" id="image-upload" accept="image/*">
+        <button id="start-game">プレイ</button>
+        <input type="color" id="territory-color" value="#ff0000">
+        <input type="text" id="territory-name" placeholder="国名">
+        <button id="create-territory">領土作成</button>
+        <label>
+            <input type="checkbox" id="export-on-update"> 地図を更新するごとにエクスポート
+        </label>
+        <button id="save">保存</button>
+        <button id="load">読み込み</button>
+        <button id="reset">リセット</button>
+    </div>
+    <div id="canvas-container">
+        <img id="uploaded-image" />
+        <canvas id="canvas"></canvas>
+        <div id="territory-list"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadedImage = document.getElementById('uploaded-image');
+        const territoryListDiv = document.getElementById('territory-list');
+
+        let territories = [];
+        let imageLoaded = false;
+        let intervalId;
+
+        // 画像アップロード
+        document.getElementById('image-upload').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                uploadedImage.src = e.target.result;
+                uploadedImage.onload = () => {
+                    canvas.width = uploadedImage.width;
+                    canvas.height = uploadedImage.height;
+                    uploadedImage.style.display = 'block';
+                    imageLoaded = true;
+                    loadTerritories();
+                    renderTerritoryList();
+                    renderCanvas();
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 描画関数
+        function drawTriangle(x, y, radius, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, y - radius);
+            ctx.lineTo(x - radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+            ctx.lineTo(x + radius * Math.sin(Math.PI / 6), y + radius * Math.cos(Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawDiamond(x, y, radius, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x, y - radius);
+            ctx.lineTo(x - radius, y);
+            ctx.lineTo(x, y + radius);
+            ctx.lineTo(x + radius, y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawParallelogram(x, y, width, height, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x - width / 2, y - height / 2);
+            ctx.lineTo(x + width / 2, y - height / 2);
+            ctx.lineTo(x + width / 2, y + height / 2);
+            ctx.lineTo(x - width / 2, y + height / 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawStar(x, y, radius, color) {
+            const spikeCount = 6;
+            const spikeLength = radius * 1.5;
+            const angleStep = Math.PI / spikeCount;
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            for (let i = 0; i < spikeCount * 2; i++) {
+                const angle = i * angleStep;
+                const r = i % 2 === 0 ? radius : spikeLength;
+                const xPos = x + r * Math.cos(angle);
+                const yPos = y - r * Math.sin(angle);
+                if (i === 0) ctx.moveTo(xPos, yPos);
+                else ctx.lineTo(xPos, yPos);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawTerritory(territory) {
+            ctx.save();
+            ctx.fillStyle = territory.color;
+            ctx.translate(territory.x, territory.y);
+            ctx.rotate(territory.angle || 0);
+            ctx.translate(-territory.x, -territory.y);
+            const r = territory.radius;
+            switch (territory.shape) {
+                case 'circle':
+                    ctx.beginPath();
+                    ctx.arc(territory.x, territory.y, r, 0, Math.PI * 2);
+                    ctx.fill();
+                    break;
+                case 'rectangle':
+                    ctx.fillRect(territory.x - r, territory.y - r, r * 2, r * 2);
+                    break;
+                case 'triangle':
+                    drawTriangle(territory.x, territory.y, r, territory.color);
+                    break;
+                case 'diamond':
+                    drawDiamond(territory.x, territory.y, r, territory.color);
+                    break;
+                case 'parallelogram':
+                    drawParallelogram(territory.x, territory.y, r, r, territory.color);
+                    break;
+                case 'star':
+                    drawStar(territory.x, territory.y, r, territory.color);
+                    break;
+            }
+            ctx.restore();
+        }
+
+        function renderCanvas() {
+            if (!imageLoaded) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(uploadedImage, 0, 0);
+            territories.forEach(drawTerritory);
+        }
+
+        // ランダム拡大ゲーム
+        document.getElementById('start-game').addEventListener('click', () => {
+            if (!imageLoaded) {
+                alert('画像がアップロードされていません。');
+                return;
+            }
+            if (intervalId) clearInterval(intervalId);
+
+            intervalId = setInterval(() => {
+                ctx.drawImage(uploadedImage, 0, 0);
+                const numTerritoriesToExpand = Math.floor(Math.random() * 6) + 1;
+                const shuffled = territories.slice().sort(() => 0.5 - Math.random());
+                const toExpand = shuffled.slice(0, Math.min(numTerritoriesToExpand, shuffled.length));
+
+                territories.forEach(t => {
+                    if (toExpand.includes(t)) {
+                        t.radius += Math.random() * 2 + 6;
+                        t.angle = (t.angle || 0) + (Math.random() - 0.5) * 0.1;
+                    }
+                    drawTerritory(t);
+                });
+
+                if (document.getElementById('export-on-update').checked) saveToLocalStorage();
+            }, Math.floor(Math.random() * 2000) + 1000);
+        });
+
+        // 領土作成
+        function createTerritory(x, y) {
+            const color = document.getElementById('territory-color').value;
+            const name = document.getElementById('territory-name').value || `国${territories.length + 1}`;
+            const shapes = ['circle', 'rectangle', 'triangle', 'diamond', 'parallelogram', 'star'];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            territories.push({x, y, radius: 10, color, name, shape, angle: 0});
+            saveToLocalStorage();
+            renderTerritoryList();
+            renderCanvas();
+        }
+
+        document.getElementById('create-territory').addEventListener('click', () => {
+            createTerritory(Math.random() * canvas.width, Math.random() * canvas.height);
+        });
+
+        // タッチ/クリックで国家設置
+        canvas.addEventListener('pointerdown', (e) => {
+            if (!imageLoaded) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            createTerritory(x, y);
+        });
+
+        // 国家リスト描画
+        function renderTerritoryList() {
+            territoryListDiv.innerHTML = '';
+            territories.forEach(t => {
+                const div = document.createElement('div');
+                div.textContent = t.name;
+                div.style.background = t.color;
+                div.style.color = getContrastYIQ(t.color);
+                div.addEventListener('click', () => {
+                    navigator.clipboard.writeText(t.color);
+                    alert(`${t.name}の色 ${t.color} をコピーしました`);
+                });
+                territoryListDiv.appendChild(div);
+            });
+        }
+
+        function getContrastYIQ(hexcolor) {
+            hexcolor = hexcolor.replace("#", "");
+            const r = parseInt(hexcolor.substr(0,2),16);
+            const g = parseInt(hexcolor.substr(2,2),16);
+            const b = parseInt(hexcolor.substr(4,2),16);
+            const yiq = ((r*299)+(g*587)+(b*114))/1000;
+            return (yiq >= 128) ? "#000" : "#fff";
+        }
+
+        // 保存/読み込み
+        document.getElementById('save').addEventListener('click', saveToLocalStorage);
+        document.getElementById('load').addEventListener('click', () => {
+            const dataURL = localStorage.getItem('savedMap');
+            if (dataURL) {
+                const img = new Image();
+                img.src = dataURL;
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                };
+            }
+            loadTerritories();
+            renderTerritoryList();
+            renderCanvas();
+        });
+
+        // リセット機能
+        document.getElementById('reset').addEventListener('click', () => {
+            if (!confirm('全ての領土を削除してリセットしますか？')) return;
+            territories = [];
+            if (intervalId) clearInterval(intervalId);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (imageLoaded) ctx.drawImage(uploadedImage, 0, 0);
+            renderTerritoryList();
+            localStorage.removeItem('territories');
+            localStorage.removeItem('savedMap');
+        });
+
+        function saveToLocalStorage() {
+            const dataURL = canvas.toDataURL();
+            localStorage.setItem('savedMap', dataURL);
+            localStorage.setItem('territories', JSON.stringify(territories));
+        }
+
+        function loadTerritories() {
+            const data = localStorage.getItem('territories');
+            if (data) territories = JSON.parse(data);
+        }
+    </script>
+</body>
+</html>
